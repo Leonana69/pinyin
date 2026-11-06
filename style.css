@@ -1,13 +1,13 @@
 /* 口 kǒu
-   International Klein Blue field, one giant character, mouths as flat cards.
+   White field, black type, one giant character, mouths as flat cards.
    No radii, no shadows, no gradients: colour and type do all the work. */
 
 :root {
-  --blue: #002fa7;
-  --paper: #f5f2ea;
+  --field: #fff;
+  --ink: #000;
   --flesh: #f2a9a2;
-  --ghost: rgba(245, 242, 234, .1);
-  --quiet: rgba(245, 242, 234, .62);
+  --ghost: rgba(0, 0, 0, .08);
+  --quiet: rgba(0, 0, 0, .55);
 
   --gutter: clamp(16px, 2.4vw, 36px);
   --card-h: min(62dvh, 66vw);
@@ -27,8 +27,8 @@ html, body { height: 100%; }
 
 body {
   overflow: hidden;
-  background: var(--blue);
-  color: var(--paper);
+  background: var(--field);
+  color: var(--ink);
   font-family: var(--latin);
   -webkit-font-smoothing: antialiased;
 }
@@ -38,7 +38,7 @@ button {
   cursor: pointer;
 }
 
-button:focus-visible { outline: 2px solid var(--flesh); outline-offset: 4px; }
+button:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
 
 .sr-only {
   position: absolute;
@@ -58,8 +58,8 @@ button:focus-visible { outline: 2px solid var(--flesh); outline-offset: 4px; }
   border: 0;
   outline: 0;
   background: none;
-  color: var(--paper);
-  caret-color: var(--flesh);
+  color: var(--ink);
+  caret-color: var(--flesh);  /* page-tall, so black would slash through the character */
   text-align: center;
   font-family: var(--han);
   font-weight: 900;
@@ -69,7 +69,7 @@ button:focus-visible { outline: 2px solid var(--flesh); outline-offset: 4px; }
   transition: color .5s linear;
 }
 
-#word::placeholder { color: var(--paper); opacity: 1; }
+#word::placeholder { color: var(--ink); opacity: 1; }
 
 body:is([data-state="playing"], [data-state="rest"]) #word { color: var(--ghost); }
 
@@ -126,12 +126,12 @@ body:is([data-state="playing"], [data-state="rest"]) #word::selection {
   object-fit: cover;
 }
 
-/* A silent mouth sinks into the field; a speaking one blooms back to flesh. */
+/* White in `color` blend mode drains a silent mouth to grey; a speaking one blooms back to flesh. */
 .card::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: var(--blue);
+  background: var(--field);
   mix-blend-mode: color;
   transition: opacity .35s linear;
 }
@@ -146,8 +146,8 @@ body:is([data-state="playing"], [data-state="rest"]) #word::selection {
   bottom: 0;
   min-width: 1.6em;
   padding: .12em .3em .2em;
-  background: var(--blue);
-  color: var(--paper);
+  background: var(--field);
+  color: var(--ink);
   font-size: calc(var(--card-h) * .11);
   font-weight: 500;
   line-height: 1;
@@ -208,7 +208,7 @@ body:is([data-state="playing"], [data-state="rest"]) #word::selection {
 }
 
 .examples button { border-bottom: 2px solid transparent; }
-.examples button:hover { border-bottom-color: var(--flesh); color: var(--flesh); }
+.examples button:hover { border-bottom-color: var(--ink); }
 
 /* Examples make way the moment there is a word to spell. */
 body:not([data-state="idle"]) .examples { display: none; }
@@ -237,15 +237,16 @@ body:not([data-state="idle"]) .examples { display: none; }
   transition: color .2s linear;
 }
 
-.readout i.on { color: var(--flesh); }
+.readout i.on { color: var(--ink); }
 [data-state="typing"] .readout i,
-[data-state="rest"] .readout i { color: var(--paper); }
+[data-state="rest"] .readout i { color: var(--ink); }
 
 .go {
   flex: none;
   padding: .55em .9em .6em;
-  background: var(--paper);
-  color: var(--blue);
+  border: 2px solid var(--ink);
+  background: var(--field);
+  color: var(--ink);
   font-size: clamp(14px, 1.15vw, 16px);
   font-weight: 500;
   line-height: 1;

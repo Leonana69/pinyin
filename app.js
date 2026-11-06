@@ -2,7 +2,7 @@
 
 /* Everything worth tuning lives here. */
 const CONFIG = {
-  overlap: 1,           // seconds: the next clip starts this long before the current one ends
+  overlap: 2,           // seconds: the next clip starts this long before the current one ends
   slideDuration: 0.75,  // seconds: the slide-in; clips open their mouth about this far in
   restStagger: 0.07,    // seconds between each card settling, left to right
   lookahead: 3,         // clips to buffer ahead of the one playing
@@ -174,11 +174,16 @@ function speak(run, index) {
     if (!isLast) speak(run, index + 1);
   };
 
+  let finished = false;
   const finishClip = () => {
+    if (finished) return;
+    finished = true;
     card.el.classList.remove('speaking');
     run.spans[index].classList.remove('on');
     handOff();
-    if (isLast && !run.dead) settle(run);
+    // With a long overlap a short final clip can end before a longer one before it.
+    run.spoken += 1;
+    if (run.spoken === run.cards.length && !run.dead) settle(run);
   };
 
   if (card.failed) return finishClip();
@@ -256,7 +261,7 @@ function perform(text) {
   const run = current = {
     track, cards,
     spans: renderReadout(syllables),
-    index: 0, dead: false, finished: false, warned: false, buffering: false,
+    index: 0, spoken: 0, dead: false, finished: false, warned: false, buffering: false,
   };
 
   cards.forEach((card) => {
