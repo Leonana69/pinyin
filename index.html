@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>口 kǒu</title>
+  <meta name="description" content="Type a Chinese word. A mouth spells it out, one pinyin letter at a time.">
+  <meta name="theme-color" content="#002fa7">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23002fa7'/%3E%3Crect x='8' y='8' width='16' height='16' fill='none' stroke='%23f5f2ea' stroke-width='4'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-state="idle">
+
+  <form id="composer" autocomplete="off">
+    <label class="sr-only" for="word">输入汉字 Type Chinese</label>
+    <input id="word" type="text" placeholder="口"
+           enterkeyhint="go" autocapitalize="off" autocorrect="off" spellcheck="false" autofocus>
+
+    <header class="hud hud-top">
+      <h1 class="mark">口 <span>kǒu</span></h1>
+      <p class="hint">输入汉字，按回车<br><span>Type Chinese, press Enter</span></p>
+    </header>
+
+    <footer class="hud hud-bottom">
+      <div class="left">
+        <nav class="examples" aria-label="示例 Examples">
+          <button type="button" data-word="咬">咬</button>
+          <button type="button" data-word="你好">你好</button>
+          <button type="button" data-word="女">女</button>
+          <button type="button" data-word="嘴巴">嘴巴</button>
+          <button type="button" data-word="说话">说话</button>
+        </nav>
+        <p id="readout" class="readout" aria-live="polite"></p>
+      </div>
+      <button id="go" class="go" type="submit">播放 <span>Play</span></button>
+    </footer>
+  </form>
+
+  <div id="stage" class="stage" aria-hidden="true"></div>
+
+  <script src="vendor/pinyin-pro.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

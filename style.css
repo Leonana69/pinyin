@@ -1,0 +1,262 @@
+/* 口 kǒu
+   International Klein Blue field, one giant character, mouths as flat cards.
+   No radii, no shadows, no gradients: colour and type do all the work. */
+
+:root {
+  --blue: #002fa7;
+  --paper: #f5f2ea;
+  --flesh: #f2a9a2;
+  --ghost: rgba(245, 242, 234, .1);
+  --quiet: rgba(245, 242, 234, .62);
+
+  --gutter: clamp(16px, 2.4vw, 36px);
+  --card-h: min(62dvh, 66vw);
+  --card-w: calc(var(--card-h) * 4 / 3);   /* the footage is 4:3 */
+  --card-gap: clamp(6px, .9vw, 14px);
+
+  --slide: .75s;                            /* overwritten from CONFIG in app.js */
+  --ease: cubic-bezier(.2, .8, .2, 1);
+
+  --han: "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "STSong", "SimSun", serif;
+  --latin: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; }
+
+html, body { height: 100%; }
+
+body {
+  overflow: hidden;
+  background: var(--blue);
+  color: var(--paper);
+  font-family: var(--latin);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  all: unset;
+  cursor: pointer;
+}
+
+button:focus-visible { outline: 2px solid var(--flesh); outline-offset: 4px; }
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* ── The giant character ─────────────────────────────── */
+
+#word {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0 var(--gutter);
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--paper);
+  caret-color: var(--flesh);
+  text-align: center;
+  font-family: var(--han);
+  font-weight: 900;
+  /* --units is the text's width in em, measured roughly in app.js */
+  font-size: min(68dvh, calc(92vw / var(--units, 1)));
+  line-height: 1;
+  transition: color .5s linear;
+}
+
+#word::placeholder { color: var(--paper); opacity: 1; }
+
+body:is([data-state="playing"], [data-state="rest"]) #word { color: var(--ghost); }
+
+/* The finished word stays selected so the next keystroke replaces it; keep that invisible. */
+body:is([data-state="playing"], [data-state="rest"]) #word::selection {
+  background: transparent;
+  color: var(--ghost);
+}
+
+/* ── Cards ───────────────────────────────────────────── */
+
+.stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.track {
+  position: relative;
+  display: flex;
+  flex: none;
+  gap: var(--card-gap);
+  transform: translate3d(calc(50vw - var(--card-w) / 2), 0, 0);  /* first card, centred */
+  transform-origin: 0 50%;
+  transition: transform var(--slide) var(--ease);
+  will-change: transform;
+}
+
+.card {
+  position: relative;
+  flex: none;
+  width: var(--card-w);
+  height: var(--card-h);
+  overflow: hidden;
+  background: var(--flesh);
+  /* Each card waits just past the right edge until its clip begins. */
+  visibility: hidden;
+  transform: translate3d(calc(50vw + var(--card-w) / 2), 0, 0);
+  transition: transform var(--slide) var(--ease);
+}
+
+.card.arrived { visibility: visible; transform: none; }
+
+/* Syllables breathe: a wider gap where a new character begins. */
+.card.syllable-start:not(:first-child) { margin-left: calc(var(--card-gap) * 3); }
+
+.card video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* A silent mouth sinks into the field; a speaking one blooms back to flesh. */
+.card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--blue);
+  mix-blend-mode: color;
+  transition: opacity .35s linear;
+}
+
+.card.speaking::after,
+[data-state="rest"] .card::after { opacity: 0; }
+
+.card .tag {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  bottom: 0;
+  min-width: 1.6em;
+  padding: .12em .3em .2em;
+  background: var(--blue);
+  color: var(--paper);
+  font-size: calc(var(--card-h) * .11);
+  font-weight: 500;
+  line-height: 1;
+  text-align: center;
+}
+
+/* ── HUD ─────────────────────────────────────────────── */
+
+.hud {
+  position: fixed;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--gutter);
+  padding: var(--gutter);
+  pointer-events: none;
+}
+
+.hud > *, .hud button { pointer-events: auto; }
+
+.hud-top { top: 0; align-items: flex-start; }
+.hud-bottom { bottom: 0; align-items: flex-end; }
+
+.mark {
+  font-family: var(--han);
+  font-size: clamp(20px, 2vw, 28px);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.mark span {
+  font-family: var(--latin);
+  font-size: .62em;
+  font-weight: 400;
+  letter-spacing: .02em;
+}
+
+.hint {
+  font-size: clamp(13px, 1.05vw, 15px);
+  line-height: 1.35;
+  text-align: right;
+}
+
+.hint span { color: var(--quiet); }
+
+.left { min-width: 0; }
+
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .2em 1.1em;
+  font-family: var(--han);
+  font-size: clamp(20px, 2.2vw, 30px);
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.examples button { border-bottom: 2px solid transparent; }
+.examples button:hover { border-bottom-color: var(--flesh); color: var(--flesh); }
+
+/* Examples make way the moment there is a word to spell. */
+body:not([data-state="idle"]) .examples { display: none; }
+
+.readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 .5em;
+  font-size: clamp(24px, 3vw, 42px);
+  font-weight: 500;
+  letter-spacing: .01em;
+  line-height: 1.1;
+}
+
+.readout:empty { display: none; }
+
+.readout .note {
+  font-size: .5em;
+  font-weight: 400;
+  align-self: center;
+}
+
+.readout i {
+  font-style: normal;
+  color: var(--quiet);
+  transition: color .2s linear;
+}
+
+.readout i.on { color: var(--flesh); }
+[data-state="typing"] .readout i,
+[data-state="rest"] .readout i { color: var(--paper); }
+
+.go {
+  flex: none;
+  padding: .55em .9em .6em;
+  background: var(--paper);
+  color: var(--blue);
+  font-size: clamp(14px, 1.15vw, 16px);
+  font-weight: 500;
+  line-height: 1;
+  transition: background-color .15s linear;
+}
+
+.go span { opacity: .7; }
+.go:hover { background: var(--flesh); }
+
+[data-state="idle"] .go { visibility: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  .track, .card { transition-duration: 1ms; }
+}
