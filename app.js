@@ -2,8 +2,8 @@
 
 /* Everything worth tuning lives here. */
 const CONFIG = {
-  overlap: 2,           // seconds: the next clip starts this long before the current one ends
-  slideDuration: 0.75,  // seconds: the slide-in; clips open their mouth about this far in
+  overlap: 0.5,         // seconds: the next clip starts this long before the current one ends
+  slideDuration: 0.75,  // seconds: the slide-in
   restStagger: 0.07,    // seconds between each card settling, left to right
   lookahead: 3,         // clips to buffer ahead of the one playing
   startPatience: 2,     // seconds to wait for the first clip to buffer before starting anyway
@@ -15,9 +15,9 @@ const CONFIG = {
   // Seconds into each clip where the mouth is most fully formed. Cards settle
   // on this frame once the word is finished.
   restFrames: {
-    a: 1.03, b: 1.07, c: 0.77, d: 1.0, e: 1.0, f: 0.87, g: 1.03, h: 0.57, i: 1.43,
-    j: 0.85, k: 1.8, l: 1.1, m: 1.07, n: 0.57, o: 1.13, p: 1.1, q: 1.07, r: 1.27,
-    s: 0.57, t: 0.67, u: 0.73, v: 1.5, w: 1.5, x: 0.7, y: 0.93, z: 0.67,
+    a: 0.36, b: 0.4, c: 0.27, d: 0.4, e: 0.37, f: 0.4, g: 0.43, h: 0.14, i: 0.3,
+    j: 0.35, k: 0.9, l: 0.57, m: 0.54, n: 0.4, o: 0.36, p: 0.33, q: 0.64, r: 0.4,
+    s: 0.5, t: 0.44, u: 0.36, v: 0.63, w: 0.53, x: 0.6, y: 0.3, z: 0.5,
   },
 };
 
