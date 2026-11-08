@@ -6,13 +6,12 @@
   --field: #fff;
   --ink: #000;
   --flesh: #f2a9a2;
-  --ghost: rgba(0, 0, 0, .08);
+  --ghost: rgba(0, 0, 0, .3);           /* the word, laid over the clips */
+  --word-scale: .5;                     /* the word's size over the clips, against its typing size */
+  --word-settle: .8s;                   /* how long it takes to shrink and fade there */
   --quiet: rgba(0, 0, 0, .55);
 
   --gutter: clamp(16px, 2.4vw, 36px);
-  --card-h: min(62dvh, 66vw);
-  --card-w: calc(var(--card-h) * 4 / 3);   /* the footage is 4:3 */
-  --card-gap: clamp(6px, .9vw, 14px);
 
   --slide: .75s;                            /* overwritten from CONFIG in app.js */
   --ease: cubic-bezier(.2, .8, .2, 1);
@@ -51,6 +50,7 @@ button:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
 
 #word {
   position: fixed;
+  z-index: 1;               /* in front of the clips; the HUD stays above it */
   inset: 0;
   width: 100%;
   height: 100%;
@@ -66,12 +66,17 @@ button:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
   /* --units is the text's width in em, measured roughly in app.js */
   font-size: min(68dvh, calc(92vw / var(--units, 1)));
   line-height: 1;
-  transition: color .5s linear;
+  transition: color .2s linear, transform .2s var(--ease);  /* quick back to full size when typing again */
 }
 
 #word::placeholder { color: var(--ink); opacity: 1; }
 
-body:is([data-state="playing"], [data-state="rest"]) #word { color: var(--ghost); }
+/* On Enter the word shrinks and fades in place, staying centred over the clips. */
+body:is([data-state="playing"], [data-state="rest"]) #word {
+  color: var(--ghost);
+  transform: scale(var(--word-scale));
+  transition: color var(--word-settle) linear, transform var(--word-settle) var(--ease);
+}
 
 /* The finished word stays selected so the next keystroke replaces it; keep that invisible. */
 body:is([data-state="playing"], [data-state="rest"]) #word::selection {
@@ -84,40 +89,30 @@ body:is([data-state="playing"], [data-state="rest"]) #word::selection {
 .stage {
   position: fixed;
   inset: 0;
-  display: flex;
-  align-items: center;
   overflow: hidden;
   pointer-events: none;
 }
 
+/* One rectangle of clips, edge to edge. app.js sets the columns, cell size and position. */
 .track {
-  position: relative;
-  display: flex;
-  flex: none;
-  gap: var(--card-gap);
-  transform: translate3d(calc(50vw - var(--card-w) / 2), 0, 0);  /* first card, centred */
-  transform-origin: 0 50%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--cell-w));
+  grid-auto-rows: var(--cell-h);
   transition: transform var(--slide) var(--ease);
   will-change: transform;
 }
 
 .card {
   position: relative;
-  flex: none;
-  width: var(--card-w);
-  height: var(--card-h);
   overflow: hidden;
   background: var(--flesh);
-  /* Each card waits just past the right edge until its clip begins. */
-  visibility: hidden;
-  transform: translate3d(calc(50vw + var(--card-w) / 2), 0, 0);
-  transition: transform var(--slide) var(--ease);
+  visibility: hidden;       /* each card appears in its cell the moment its clip begins */
 }
 
-.card.arrived { visibility: visible; transform: none; }
-
-/* Syllables breathe: a wider gap where a new character begins. */
-.card.syllable-start:not(:first-child) { margin-left: calc(var(--card-gap) * 3); }
+.card.arrived { visibility: visible; }
 
 .card video {
   display: block;
@@ -126,32 +121,16 @@ body:is([data-state="playing"], [data-state="rest"]) #word::selection {
   object-fit: cover;
 }
 
-/* White in `color` blend mode drains a silent mouth to grey; a speaking one blooms back to flesh. */
-.card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--field);
-  mix-blend-mode: color;
-  transition: opacity .35s linear;
-}
-
-.card.speaking::after,
-[data-state="rest"] .card::after { opacity: 0; }
-
+/* The letter sits on the mouth itself, white and bare. */
 .card .tag {
   position: absolute;
-  z-index: 1;
-  left: 0;
-  bottom: 0;
-  min-width: 1.6em;
-  padding: .12em .3em .2em;
-  background: var(--field);
-  color: var(--ink);
-  font-size: calc(var(--card-h) * .11);
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: calc(var(--cell-h) * .11);
   font-weight: 500;
   line-height: 1;
-  text-align: center;
 }
 
 /* ── HUD ─────────────────────────────────────────────── */
@@ -259,5 +238,5 @@ body:not([data-state="idle"]) .examples { display: none; }
 [data-state="idle"] .go { visibility: hidden; }
 
 @media (prefers-reduced-motion: reduce) {
-  .track, .card { transition-duration: 1ms; }
+  .track { transition-duration: 1ms; }
 }

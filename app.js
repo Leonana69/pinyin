@@ -2,9 +2,10 @@
 
 /* Everything worth tuning lives here. */
 const CONFIG = {
-  overlap: 0.5,         // seconds: the next clip starts this long before the current one ends
-  slideDuration: 0.75,  // seconds: the slide-in
-  restStagger: 0.07,    // seconds between each card settling, left to right
+  overlap: 0.7,         // seconds: the next clip starts this long before the current one ends;
+                        // a clip shorter than this overlaps for its whole length
+  slideDuration: 0.75,  // seconds: the grid sliding away when the next word starts
+  restStagger: 0.07,    // seconds between each card settling, in reading order (reduced motion only)
   lookahead: 3,         // clips to buffer ahead of the one playing
   startPatience: 2,     // seconds to wait for the first clip to buffer before starting anyway
   maxStartLag: 0.5,     // seconds: upper limit on the audio delay we compensate for
@@ -12,8 +13,9 @@ const CONFIG = {
   umlautClip: 'v',      // ü has no clip of its own; v is how pinyin keyboards type it
   clipPath: (letter) => `assets/web/${letter}.mp4`,
 
-  // Seconds into each clip where the mouth is most fully formed. Cards settle
-  // on this frame once the word is finished.
+  // Seconds into each clip where the mouth is most fully formed. Clips loop
+  // once the word is said, but for viewers who ask their system for reduced
+  // motion they stop on this frame instead.
   restFrames: {
     a: 0.36, b: 0.4, c: 0.27, d: 0.4, e: 0.37, f: 0.4, g: 0.43, h: 0.14, i: 0.3,
     j: 0.35, k: 0.9, l: 0.57, m: 0.54, n: 0.4, o: 0.36, p: 0.33, q: 0.64, r: 0.4,
@@ -26,8 +28,10 @@ const form = document.getElementById('composer');
 const input = document.getElementById('word');
 const stage = document.getElementById('stage');
 const readout = document.getElementById('readout');
-const hud = document.querySelector('.hud');
+const hudTop = document.querySelector('.hud-top');
+const hudBottom = document.querySelector('.hud-bottom');
 const canHover = matchMedia('(hover: hover)');
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
 document.documentElement.style.setProperty('--slide', `${CONFIG.slideDuration}s`);
 
@@ -82,9 +86,9 @@ function showNote(text) {
 
 /* ── Stage ───────────────────────────────────────────── */
 
-function createCard({ glyph, clip }, syllableStart) {
+function createCard({ glyph, clip }) {
   const el = document.createElement('div');
-  el.className = syllableStart ? 'card syllable-start' : 'card';
+  el.className = 'card';
 
   const video = document.createElement('video');
   video.playsInline = true;
@@ -116,23 +120,34 @@ function bufferAhead(run) {
   load(card);
 }
 
-function positionTrack(run) {
-  const stageWidth = stage.clientWidth;
+// A near-square grid in reading order with no gaps: 4 clips make 2×2, and 11
+// or 12 make 3×4, leaving any spare cell at the end empty. Rows and columns
+// swap when that gives bigger cards, so an upright phone gets 4×3.
+function layoutGrid(run) {
+  const count = run.cards.length;
+  const long = Math.ceil(Math.sqrt(count));
+  const short = Math.ceil(count / long);
 
-  if (run.finished) {
-    // Pull back until the whole word fits between the page margins, then centre it.
-    const last = run.cards[run.cards.length - 1].el;
-    const width = last.offsetLeft + last.offsetWidth;
-    const margin = parseFloat(getComputedStyle(hud).paddingLeft);
-    const scale = Math.min(1, (stageWidth - margin * 2) / width);
-    const x = (stageWidth - width * scale) / 2;
-    run.track.style.transform = `translate3d(${x}px, 0, 0) scale(${scale})`;
-    return;
-  }
+  // Fit between the side margins and clear of the HUD, centred on the screen like the word.
+  const { clientWidth: width, clientHeight: height } = stage;
+  const side = parseFloat(getComputedStyle(hudTop).paddingLeft);
+  const clear = Math.max(hudTop.getBoundingClientRect().bottom, height - hudBottom.getBoundingClientRect().top);
+  const boxW = width - side * 2;
+  const boxH = Math.max(height - clear * 2, height / 2);
 
-  const card = run.cards[run.index].el;
-  const x = stageWidth / 2 - (card.offsetLeft + card.offsetWidth / 2);
-  run.track.style.transform = `translate3d(${x}px, 0, 0)`;
+  const unit = (cols, rows) => Math.min(boxW / (cols * 4), boxH / (rows * 3));  // the footage is 4:3
+  const [cols, rows] = unit(long, short) >= unit(short, long) ? [long, short] : [short, long];
+
+  // Whole pixels, so neighbouring clips meet without a hairline between them.
+  const cellW = Math.floor(unit(cols, rows) * 4);
+  const cellH = Math.floor(unit(cols, rows) * 3);
+  run.track.style.setProperty('--cols', cols);
+  run.track.style.setProperty('--cell-w', `${cellW}px`);
+  run.track.style.setProperty('--cell-h', `${cellH}px`);
+
+  const x = Math.round((width - cols * cellW) / 2);
+  const y = Math.round((height - rows * cellH) / 2);
+  run.track.style.transform = `translate3d(${x}px, ${y}px, 0)`;
 }
 
 function dismiss(run) {
@@ -140,7 +155,7 @@ function dismiss(run) {
   run.dead = true;
   run.cards.forEach((card) => card.video.pause());
 
-  // Prepended so the exit distance isn't shrunk by the settled strip's scale.
+  // The whole grid slides off to the left, from wherever it sits.
   const right = run.track.getBoundingClientRect().right;
   run.track.style.transform = `translate3d(${-right - 40}px, 0, 0) ${run.track.style.transform}`;
 
@@ -163,9 +178,8 @@ function speak(run, index) {
   load(card);  // phones can ignore preloading, leaving the queue behind
   bufferAhead(run);
 
-  card.el.classList.add('arrived', 'speaking');
+  card.el.classList.add('arrived');
   run.spans[index].classList.add('on');
-  positionTrack(run);
 
   let handedOff = false;
   const handOff = () => {
@@ -178,7 +192,6 @@ function speak(run, index) {
   const finishClip = () => {
     if (finished) return;
     finished = true;
-    card.el.classList.remove('speaking');
     run.spans[index].classList.remove('on');
     handOff();
     // With a long overlap a short final clip can end before a longer one before it.
@@ -189,7 +202,13 @@ function speak(run, index) {
   if (card.failed) return finishClip();
   card.onFail = finishClip;
 
-  video.addEventListener('ended', finishClip, { once: true });
+  // Sound plays once; after that the picture keeps looping in silence.
+  const loopSilently = () => {
+    video.muted = true;
+    video.loop = true;
+    if (!run.dead && !reducedMotion.matches) video.play().catch(() => {});
+  };
+  video.addEventListener('ended', () => { finishClip(); loopSilently(); }, { once: true });
 
   // Watch the clip itself rather than a timer, so a stall delays the
   // hand-off instead of breaking the overlap. `ended` covers background tabs,
@@ -208,7 +227,9 @@ function speak(run, index) {
       startedAt = 0;
     }
 
-    if (!isLast && duration - currentTime <= CONFIG.overlap + startLag) return handOff();
+    // Capped at the clip's length, so a short clip and the next one start together.
+    const overlap = Math.min(CONFIG.overlap, duration);
+    if (!isLast && duration - currentTime <= overlap + startLag) return handOff();
     requestAnimationFrame(watch);
   };
 
@@ -225,11 +246,11 @@ function speak(run, index) {
   });
 }
 
-// The word is said. Pull back and let every mouth rest open, left to right.
+// The word is said. The mouths keep looping, unless the viewer asked for
+// reduced motion: then each one stops on its most open frame, in reading order.
 function settle(run) {
-  run.finished = true;
   body.dataset.state = 'rest';
-  positionTrack(run);
+  if (!reducedMotion.matches) return;
 
   run.cards.forEach(({ video, clip, failed }, i) => {
     if (failed) return;
@@ -241,9 +262,7 @@ function settle(run) {
 
 function perform(text) {
   const syllables = decompose(text);
-  const letters = syllables
-    .flatMap((syllable) => syllable.map((letter, i) => ({ ...letter, syllableStart: i === 0 })))
-    .slice(0, CONFIG.maxCards);
+  const letters = syllables.flat().slice(0, CONFIG.maxCards);
 
   if (!letters.length) {
     renderReadout([]);
@@ -255,13 +274,13 @@ function perform(text) {
 
   const track = document.createElement('div');
   track.className = 'track';
-  const cards = letters.map((letter) => createCard(letter, letter.syllableStart));
+  const cards = letters.map(createCard);
   track.append(...cards.map((card) => card.el));
 
   const run = current = {
     track, cards,
     spans: renderReadout(syllables),
-    index: 0, spoken: 0, dead: false, finished: false, warned: false, buffering: false,
+    index: 0, spoken: 0, dead: false, warned: false, buffering: false,
   };
 
   cards.forEach((card) => {
@@ -280,8 +299,8 @@ function perform(text) {
   // user gesture, and this is the last moment we are in one.
   cards.forEach(({ video }) => { video.play().catch(() => {}); video.pause(); });
 
+  layoutGrid(run);
   stage.append(track);
-  track.getBoundingClientRect();  // lay the cards out off-stage so their arrival animates
 
   body.dataset.state = 'playing';
   armForNextWord();
@@ -329,6 +348,13 @@ form.addEventListener('submit', (event) => {
   perform(input.value);
 });
 
+// The 口 mark starts over: the word clears and the examples come back.
+document.getElementById('home').addEventListener('click', () => {
+  input.value = '';
+  onType();
+  if (canHover.matches) input.focus();
+});
+
 document.querySelectorAll('[data-word]').forEach((button) => {
   button.addEventListener('click', () => {
     input.value = button.dataset.word;
@@ -344,5 +370,5 @@ document.addEventListener('pointerup', () => {
 
 window.addEventListener('resize', () => {
   fitText();
-  if (current) positionTrack(current);
+  if (current) layoutGrid(current);
 });
