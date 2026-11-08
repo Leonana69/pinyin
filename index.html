@@ -13,8 +13,8 @@
 
   <form id="composer" autocomplete="off">
     <label class="sr-only" for="word">输入汉字 Type Chinese</label>
-    <input id="word" type="text" placeholder="口"
-           enterkeyhint="go" autocapitalize="off" autocorrect="off" spellcheck="false" autofocus>
+    <textarea id="word" rows="1" placeholder="口"
+              enterkeyhint="go" autocapitalize="off" autocorrect="off" spellcheck="false" autofocus></textarea>
 
     <header class="hud hud-top">
       <h1 class="mark"><button id="home" type="button" title="重新开始 · Start over">口 <span>kǒu</span></button></h1>
@@ -38,6 +38,7 @@
   <div id="stage" class="stage" aria-hidden="true"></div>
 
   <script src="vendor/pinyin-pro.js"></script>
+  <script src="assets/sheets/manifest.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -1,21 +1,30 @@
 'use strict';
 
-/* Everything worth tuning lives here. */
+/* 口 kǒu
+   A typed word becomes a grid of mouths, one per pinyin letter. Every card is
+   painted on a single canvas from a sheet holding all of its letter's frames,
+   and every sound is scheduled through Web Audio on one clock. Neither has a
+   cap the way video players do (browsers stop at about 75 a page), so a
+   sentence can run to hundreds of cards, and the overlaps land exactly. */
+
 const CONFIG = {
   overlap: 1,           // seconds: the next clip starts this long before the current one ends;
                         // a clip shorter than this overlaps for its whole length
+  lead: 0.15,           // seconds from pressing Enter to the first sound, so nothing is scheduled late
   slideDuration: 0.75,  // seconds: the grid sliding away when the next word starts
-  restStagger: 0.07,    // seconds between each card settling, in reading order (reduced motion only)
-  lookahead: 3,         // clips to buffer ahead of the one playing
-  startPatience: 2,     // seconds to wait for the first clip to buffer before starting anyway
-  maxStartLag: 0.5,     // seconds: upper limit on the audio delay we compensate for
-  maxCards: 60,         // longest word performed; browsers cap live video elements near 75
+  maxCards: 300,
   umlautClip: 'v',      // ü has no clip of its own; v is how pinyin keyboards type it
-  clipPath: (letter) => `assets/web/${letter}.mp4`,
+  sheetMemoryMB: 400,   // most memory a word's frames may take once unpacked; bigger frames step down to fit
+  sheetPath: (size, letter) => `assets/sheets/${size}/${letter}.jpg`,
+  soundPath: (letter) => `assets/sound/${letter}.m4a`,
+  labelFont: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+  wordLine: 14,         // characters per line of the typed word before it wraps
+  wordTracking: 0.2,    // extra space after each character of the typed word, in em (20%)
+  wordLeading: 1.2,     // line height of the typed word, against its size (20% more than solid)
+  readoutOpen: 0.3,     // seconds for the pinyin line to slide open or shut
 
-  // Seconds into each clip where the mouth is most fully formed. Clips loop
-  // once the word is said, but for viewers who ask their system for reduced
-  // motion they stop on this frame instead.
+  // Seconds into each clip where the mouth is most fully formed. With reduced
+  // motion, cards stop on this frame once the word is said instead of looping.
   restFrames: {
     a: 0.36, b: 0.4, c: 0.27, d: 0.4, e: 0.37, f: 0.4, g: 0.43, h: 0.14, i: 0.3,
     j: 0.35, k: 0.9, l: 0.57, m: 0.54, n: 0.4, o: 0.36, p: 0.33, q: 0.64, r: 0.4,
@@ -32,20 +41,17 @@ const hudTop = document.querySelector('.hud-top');
 const hudBottom = document.querySelector('.hud-bottom');
 const canHover = matchMedia('(hover: hover)');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const SIZES = Object.keys(SHEETS.tiers).map(Number).sort((a, b) => a - b);  // frame widths on offer
 
 document.documentElement.style.setProperty('--slide', `${CONFIG.slideDuration}s`);
+document.documentElement.style.setProperty('--word-tracking', `${CONFIG.wordTracking}em`);
+document.documentElement.style.setProperty('--word-leading', CONFIG.wordLeading);
 
+const audio = new (window.AudioContext || window.webkitAudioContext)();
 let current = null; // the run on stage
-
-// Seconds between a clip being started and it actually being heard. Bluetooth
-// alone adds a quarter second, which would eat most of the overlap. It differs
-// per listener, so it is measured from playback rather than assumed.
-let startLag = 0;
-const recentLags = [];
 
 /* ── Hanzi → letters ─────────────────────────────────── */
 
-// 'ǎ' → { glyph: 'ǎ', clip: 'a' }, 'ǚ' → { glyph: 'ǚ', clip: 'v' }, '!' → null
 function toLetter(glyph) {
   const decomposed = glyph.normalize('NFD');
   const base = decomposed[0].toLowerCase();
@@ -53,18 +59,21 @@ function toLetter(glyph) {
   return { glyph, clip: decomposed.includes('̈') ? CONFIG.umlautClip : base };
 }
 
-// '你好' → [[n, ǐ], [h, ǎ, o]]; anything without a clip (digits, punctuation) drops out.
 function decompose(text) {
   return pinyinPro.pinyin(text, { type: 'array' })
     .map((syllable) => [...syllable].map(toLetter).filter(Boolean))
     .filter((letters) => letters.length);
 }
 
-/* ── Readout ─────────────────────────────────────────── */
+/* ── Pinyin line ─────────────────────────────────────── */
 
+// One line, cut off with an ellipsis; hovering or clicking shows all of it.
 function renderReadout(syllables) {
   const spans = [];
-  readout.replaceChildren(...syllables.map((letters) => {
+  readoutMotion?.cancel();
+  readout.classList.remove('open');
+  readout.dataset.open = 'false';
+  readout.replaceChildren(...syllables.flatMap((letters, n) => {
     const word = document.createElement('span');
     for (const { glyph } of letters) {
       const span = document.createElement('i');
@@ -72,193 +81,235 @@ function renderReadout(syllables) {
       word.append(span);
       spans.push(span);
     }
-    return word;
+    return n ? [' ', word] : [word];  // real spaces, so the full view can wrap between syllables
   }));
+  markCut();
   return spans;
+}
+
+// Whether the pinyin runs past one line: measured with the lines laid out in full.
+function markCut() {
+  if (readout.dataset.open === 'true') return;
+  readout.classList.add('open');
+  const lines = readout.scrollHeight / parseFloat(getComputedStyle(readout).lineHeight);
+  readout.classList.remove('open');
+  readout.toggleAttribute('data-cut', lines > 1.5);
+}
+
+// The extra lines slide open upwards from the one shown, and back down.
+let readoutMotion = null;
+
+function setReadoutOpen(open) {
+  if (String(open) === readout.dataset.open || (open && !readout.hasAttribute('data-cut'))) return;
+  readout.dataset.open = String(open);
+
+  const from = readout.getBoundingClientRect().height;
+  readoutMotion?.cancel();
+  readout.classList.add('open');  // every line laid out while it moves
+  const to = open ? readout.scrollHeight : parseFloat(getComputedStyle(readout).lineHeight);
+
+  const motion = readoutMotion = readout.animate(
+    [{ height: `${from}px` }, { height: `${to}px` }],
+    { duration: reducedMotion.matches ? 1 : CONFIG.readoutOpen * 1000, easing: 'cubic-bezier(.2, .8, .2, 1)', fill: 'forwards' },
+  );
+  motion.onfinish = () => {
+    if (!open) readout.classList.remove('open');  // back to one line with its ellipsis
+    motion.cancel();                              // the height follows the text again
+    if (readoutMotion === motion) readoutMotion = null;
+  };
 }
 
 function showNote(text) {
   const note = document.createElement('span');
   note.className = 'note';
-  note.textContent = text;
+  note.textContent = ` ${text}`;
   readout.append(note);
+  markCut();
+}
+
+// A mouse opens it by hovering; a finger by tapping, and tapping elsewhere shuts it.
+// Moving, not just entering, opens it: the pointer may already be resting where a new line appears.
+readout.addEventListener('pointermove', (event) => { if (event.pointerType === 'mouse') setReadoutOpen(true); });
+readout.addEventListener('pointerleave', (event) => { if (event.pointerType === 'mouse') setReadoutOpen(false); });
+readout.addEventListener('click', () => {
+  if (!canHover.matches) setReadoutOpen(readout.dataset.open !== 'true');
+});
+document.addEventListener('click', (event) => {
+  if (!canHover.matches && !readout.contains(event.target)) setReadoutOpen(false);
+});
+
+/* ── Letters: frame sheets and sounds ────────────────── */
+
+const sheets = new Map();  // 'size/letter' → unpacked frame sheet
+const sounds = new Map();  // letter → decoded sound
+
+function fetchOk(url) {
+  return fetch(url).then((response) => {
+    if (!response.ok) throw new Error(`${url}: ${response.status}`);
+    return response;
+  });
+}
+
+function cached(map, key, load) {
+  if (!map.has(key)) {
+    const loading = load();
+    loading.catch(() => map.delete(key));  // a later word can try again
+    map.set(key, loading);
+  }
+  return map.get(key);
+}
+
+const loadSheet = (size, letter) => cached(sheets, `${size}/${letter}`, () =>
+  fetchOk(CONFIG.sheetPath(size, letter)).then((r) => r.blob()).then((blob) => createImageBitmap(blob)));
+
+const loadSound = (letter) => cached(sounds, letter, () =>
+  fetchOk(CONFIG.soundPath(letter)).then((r) => r.arrayBuffer()).then((data) => audio.decodeAudioData(data)));
+
+// Unpacked frames are large, so only the current word's are kept.
+function forgetSheetsExcept(keep) {
+  for (const [key, loading] of sheets) {
+    if (keep.has(key)) continue;
+    sheets.delete(key);
+    loading.then((sheet) => sheet.close(), () => {});
+  }
+}
+
+// The smallest frames that fill a card on this screen, stepped down if the
+// word's letters would take more memory than the budget allows.
+function frameSize(cellW, letters) {
+  const needed = cellW * (window.devicePixelRatio || 1) * 0.9;  // a slight stretch is invisible
+  let index = SIZES.findIndex((size) => size >= needed);
+  if (index < 0) index = SIZES.length - 1;
+  const bytes = (size) => letters.reduce((sum, l) => sum + SHEETS.frames[l] * size * (size * 3 / 4) * 4, 0);
+  while (index > 0 && bytes(SIZES[index]) > CONFIG.sheetMemoryMB * 1e6) index -= 1;
+  return SIZES[index];
+}
+
+// Browsers keep sound off until a click or key press; this runs inside one.
+function unlockAudio() {
+  if (audio.state !== 'running') audio.resume();
+  const blip = audio.createBufferSource();  // iPhones also want a sound started in the gesture
+  blip.buffer = audio.createBuffer(1, 1, audio.sampleRate);
+  blip.connect(audio.destination);
+  blip.start();
+}
+
+// The audio clock at the moment the speakers are actually sounding, so the
+// pictures line up with what is heard rather than with what was scheduled.
+function heardTime() {
+  if (audio.getOutputTimestamp) {
+    const { contextTime, performanceTime } = audio.getOutputTimestamp();
+    if (performanceTime) return contextTime + (performance.now() - performanceTime) / 1000;
+  }
+  return audio.currentTime - (audio.outputLatency || audio.baseLatency || 0);
 }
 
 /* ── Stage ───────────────────────────────────────────── */
 
-function createCard({ glyph, clip }) {
-  const el = document.createElement('div');
-  el.className = 'card';
-
-  const video = document.createElement('video');
-  video.playsInline = true;
-  video.preload = 'auto';
-
-  const tag = document.createElement('span');
-  tag.className = 'tag';
-  tag.textContent = glyph;
-
-  el.append(video, tag);
-  return { el, video, clip, failed: false, onFail: null };
-}
-
-function load(card) {
-  if (!card.video.hasAttribute('src')) card.video.src = CONFIG.clipPath(card.clip);
-}
-
-// Fetch clips one at a time, in playing order, so the clip needed next never
-// shares a slow connection with the ones behind it.
-function bufferAhead(run) {
-  const next = run.cards.findIndex(({ video }) => !video.hasAttribute('src'));
-  if (run.dead || run.buffering || next < 0 || next > run.index + CONFIG.lookahead) return;
-
-  const card = run.cards[next];
-  const done = () => { run.buffering = false; bufferAhead(run); };
-  run.buffering = true;
-  card.video.addEventListener('canplaythrough', done, { once: true });
-  card.video.addEventListener('error', done, { once: true });
-  load(card);
-}
-
-// A near-square grid in reading order with no gaps: 4 clips make 2×2, and 11
-// or 12 make 3×4, leaving any spare cell at the end empty. Rows and columns
-// swap when that gives bigger cards, so an upright phone gets 4×3.
-function layoutGrid(run) {
-  const count = run.cards.length;
-  const long = Math.ceil(Math.sqrt(count));
-  const short = Math.ceil(count / long);
-
-  // Fit between the side margins and clear of the HUD, centred on the screen like the word.
+// The grid that gives the biggest cards for this many clips in the space
+// available, so a long sentence fills about the same area as a short word.
+// Spare cells stay empty at the end; when two shapes give equally big cards,
+// the one with fewer empty cells wins (4 clips: 2×2, 11 or 12: 3×4).
+function planGrid(count) {
   const { clientWidth: width, clientHeight: height } = stage;
   const side = parseFloat(getComputedStyle(hudTop).paddingLeft);
   const clear = Math.max(hudTop.getBoundingClientRect().bottom, height - hudBottom.getBoundingClientRect().top);
   const boxW = width - side * 2;
   const boxH = Math.max(height - clear * 2, height / 2);
 
-  const unit = (cols, rows) => Math.min(boxW / (cols * 4), boxH / (rows * 3));  // the footage is 4:3
-  const [cols, rows] = unit(long, short) >= unit(short, long) ? [long, short] : [short, long];
+  let best = null;
+  for (let cols = 1; cols <= count; cols += 1) {
+    const rows = Math.ceil(count / cols);
+    const unit = Math.min(boxW / (cols * 4), boxH / (rows * 3));  // the footage is 4:3
+    const empty = cols * rows - count;
+    const bigger = !best || unit > best.unit * (1 + 1e-9);
+    const same = best && Math.abs(unit - best.unit) <= best.unit * 1e-9;
+    if (bigger || (same && empty < best.empty)) best = { cols, rows, unit, empty };
+  }
 
-  // Whole pixels, so neighbouring clips meet without a hairline between them.
-  const cellW = Math.floor(unit(cols, rows) * 4);
-  const cellH = Math.floor(unit(cols, rows) * 3);
-  run.track.style.setProperty('--cols', cols);
-  run.track.style.setProperty('--cell-w', `${cellW}px`);
-  run.track.style.setProperty('--cell-h', `${cellH}px`);
+  // Whole pixels, so neighbouring cards meet without a hairline between them.
+  const cellW = Math.floor(best.unit * 4);
+  const cellH = Math.floor(best.unit * 3);
+  return {
+    cols: best.cols,
+    rows: best.rows,
+    cellW,
+    cellH,
+    x: Math.round((width - best.cols * cellW) / 2),
+    y: Math.round((height - best.rows * cellH) / 2),
+  };
+}
 
-  const x = Math.round((width - cols * cellW) / 2);
-  const y = Math.round((height - rows * cellH) / 2);
-  run.track.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+function layoutGrid(run) {
+  Object.assign(run, planGrid(run.cards.length));
+  const { canvas, cols, rows, cellW, cellH } = run;
+
+  // Sharp on high-density screens: the canvas has a pixel for every screen pixel.
+  const density = window.devicePixelRatio || 1;
+  canvas.style.width = `${cols * cellW}px`;
+  canvas.style.height = `${rows * cellH}px`;
+  canvas.width = Math.round(cols * cellW * density);
+  canvas.height = Math.round(rows * cellH * density);
+  run.paint.setTransform(density, 0, 0, density, 0, 0);
+  canvas.style.transform = `translate3d(${run.x}px, ${run.y}px, 0)`;
+}
+
+// One pass over every card, once per screen refresh. Each card shows the frame
+// for how long ago its sound began, so after its first pass it simply loops.
+function paint(run) {
+  if (run.dead) return;
+  const now = heardTime();
+  const resting = now >= run.end;
+  const { paint: g, cols, rows, cellW, cellH, size } = run;
+  const tileW = size;
+  const tileH = size * 3 / 4;
+  const sheetCols = SHEETS.tiers[size].cols;
+  const { fps } = SHEETS;
+
+  g.clearRect(0, 0, cols * cellW, rows * cellH);
+  g.imageSmoothingQuality = 'high';
+  g.font = `500 ${cellH * 0.11}px ${CONFIG.labelFont}`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = '#fff';
+
+  run.cards.forEach((card, i) => {
+    const speaking = now >= card.start && now < card.end;
+    if (speaking !== card.speaking) {
+      card.speaking = speaking;
+      run.spans[i].classList.toggle('on', speaking);
+    }
+    if (now < card.start) return;  // the cell stays empty until its sound begins
+
+    const frames = SHEETS.frames[card.clip];
+    let frame = Math.floor((now - card.start) * fps) % frames;
+    if (resting && reducedMotion.matches) frame = Math.min(frames - 1, Math.round(CONFIG.restFrames[card.clip] * fps));
+
+    // Inset by a pixel so smoothing never pulls in the edge of the neighbouring frame.
+    const sx = (frame % sheetCols) * tileW + 1;
+    const sy = Math.floor(frame / sheetCols) * tileH + 1;
+    const x = (i % cols) * cellW;
+    const y = Math.floor(i / cols) * cellH;
+    g.drawImage(card.sheet, sx, sy, tileW - 2, tileH - 2, x, y, cellW, cellH);
+    g.fillText(card.glyph, x + cellW / 2, y + cellH / 2);
+  });
+
+  if (resting && body.dataset.state === 'playing') body.dataset.state = 'rest';
+  run.raf = requestAnimationFrame(() => paint(run));
 }
 
 function dismiss(run) {
   if (!run) return;
   run.dead = true;
-  run.cards.forEach((card) => card.video.pause());
+  cancelAnimationFrame(run.raf);
+  run.sources.forEach((source) => source.stop());
 
-  // The whole grid slides off to the left, from wherever it sits.
-  const right = run.track.getBoundingClientRect().right;
-  run.track.style.transform = `translate3d(${-right - 40}px, 0, 0) ${run.track.style.transform}`;
-
-  setTimeout(() => {
-    run.cards.forEach(({ video }) => { video.removeAttribute('src'); video.load(); });
-    run.track.remove();
-  }, CONFIG.slideDuration * 1000);
+  const right = run.canvas.getBoundingClientRect().right;
+  run.canvas.style.transform = `translate3d(${-right - 40}px, 0, 0) ${run.canvas.style.transform}`;
+  setTimeout(() => run.canvas.remove(), CONFIG.slideDuration * 1000);
 }
 
 /* ── Sequencing ──────────────────────────────────────── */
-
-function speak(run, index) {
-  if (run.dead) return;
-
-  const card = run.cards[index];
-  const isLast = index === run.cards.length - 1;
-  const { video } = card;
-
-  run.index = index;
-  load(card);  // phones can ignore preloading, leaving the queue behind
-  bufferAhead(run);
-
-  card.el.classList.add('arrived');
-  run.spans[index].classList.add('on');
-
-  let handedOff = false;
-  const handOff = () => {
-    if (handedOff || run.dead) return;
-    handedOff = true;
-    if (!isLast) speak(run, index + 1);
-  };
-
-  let finished = false;
-  const finishClip = () => {
-    if (finished) return;
-    finished = true;
-    run.spans[index].classList.remove('on');
-    handOff();
-    // With a long overlap a short final clip can end before a longer one before it.
-    run.spoken += 1;
-    if (run.spoken === run.cards.length && !run.dead) settle(run);
-  };
-
-  if (card.failed) return finishClip();
-  card.onFail = finishClip;
-
-  // Sound plays once; after that the picture keeps looping in silence.
-  const loopSilently = () => {
-    video.muted = true;
-    video.loop = true;
-    if (!run.dead && !reducedMotion.matches) video.play().catch(() => {});
-  };
-  video.addEventListener('ended', () => { finishClip(); loopSilently(); }, { once: true });
-
-  // Watch the clip itself rather than a timer, so a stall delays the
-  // hand-off instead of breaking the overlap. `ended` covers background tabs,
-  // where animation frames stop.
-  let startedAt = 0;
-  const watch = () => {
-    if (handedOff || run.dead) return;
-    const { currentTime, duration } = video;
-
-    // The clock ticks a few milliseconds, then holds until sound is really out,
-    // so only trust it once it is well past that first tick.
-    if (startedAt && currentTime > 0.1) {
-      const lag = (performance.now() - startedAt) / 1000 - currentTime;
-      recentLags.push(Math.min(Math.max(lag, 0), CONFIG.maxStartLag));
-      startLag = Math.min(...recentLags.slice(-3));  // the true delay is the floor; ignore slow starts
-      startedAt = 0;
-    }
-
-    // Capped at the clip's length, so a short clip and the next one start together.
-    const overlap = Math.min(CONFIG.overlap, duration);
-    if (!isLast && duration - currentTime <= overlap + startLag) return handOff();
-    requestAnimationFrame(watch);
-  };
-
-  const startWatching = () => {
-    startedAt = performance.now();
-    watch();
-  };
-
-  video.play().then(startWatching, (error) => {
-    if (run.dead || error.name !== 'NotAllowedError') return;  // load failures arrive via onFail
-    console.warn('Playback with sound was refused; continuing muted.', error);
-    video.muted = true;
-    video.play().then(startWatching, finishClip);
-  });
-}
-
-// The word is said. The mouths keep looping, unless the viewer asked for
-// reduced motion: then each one stops on its most open frame, in reading order.
-function settle(run) {
-  body.dataset.state = 'rest';
-  if (!reducedMotion.matches) return;
-
-  run.cards.forEach(({ video, clip, failed }, i) => {
-    if (failed) return;
-    setTimeout(() => {
-      if (!run.dead) video.currentTime = CONFIG.restFrames[clip];
-    }, i * CONFIG.restStagger * 1000);
-  });
-}
 
 function perform(text) {
   const syllables = decompose(text);
@@ -271,66 +322,79 @@ function perform(text) {
   }
 
   dismiss(current);
+  unlockAudio();
 
-  const track = document.createElement('div');
-  track.className = 'track';
-  const cards = letters.map(createCard);
-  track.append(...cards.map((card) => card.el));
-
+  const canvas = document.createElement('canvas');
+  canvas.className = 'board';
   const run = current = {
-    track, cards,
+    canvas,
+    paint: canvas.getContext('2d'),
+    cards: letters.map((letter) => ({ ...letter, start: Infinity, end: Infinity, speaking: false })),
     spans: renderReadout(syllables),
-    index: 0, spoken: 0, dead: false, warned: false, buffering: false,
+    sources: [],
+    end: Infinity,
+    dead: false,
+    raf: 0,
   };
 
-  cards.forEach((card) => {
-    card.video.addEventListener('error', () => {
-      if (run.dead) return;
-      card.failed = true;
-      if (!run.warned) showNote('视频加载失败 · The video clips couldn’t load');
-      run.warned = true;
-      card.onFail?.();
-    }, { once: true });
-  });
-
-  bufferAhead(run);
-
-  // Safari only lets an element make sound if it was first started inside a
-  // user gesture, and this is the last moment we are in one.
-  cards.forEach(({ video }) => { video.play().catch(() => {}); video.pause(); });
-
   layoutGrid(run);
-  stage.append(track);
-
+  stage.append(canvas);
   body.dataset.state = 'playing';
   armForNextWord();
 
-  // Some phones won't load a clip until told to play it, so never wait forever.
-  let begun = false;
-  const begin = () => {
-    if (begun) return;
-    begun = true;
-    speak(run, 0);
-  };
-  cards[0].video.addEventListener('canplaythrough', begin, { once: true });
-  cards[0].onFail = begin;
-  setTimeout(begin, CONFIG.startPatience * 1000);
+  const needed = [...new Set(letters.map(({ clip }) => clip))];
+  run.size = frameSize(run.cellW, needed);
+  forgetSheetsExcept(new Set(needed.map((letter) => `${run.size}/${letter}`)));
+
+  // Every sound is scheduled up front on the audio clock, so overlaps are exact
+  // however busy the page gets.
+  Promise.all(needed.map((letter) => Promise.all([loadSheet(run.size, letter), loadSound(letter)]))).then((loaded) => {
+    if (run.dead) return;
+    const byLetter = new Map(needed.map((letter, i) => [letter, loaded[i]]));
+
+    let when = audio.currentTime + CONFIG.lead;
+    for (const card of run.cards) {
+      const [sheet, sound] = byLetter.get(card.clip);
+      const length = SHEETS.frames[card.clip] / SHEETS.fps;
+      card.sheet = sheet;
+      card.start = when;
+      card.end = when + length;
+
+      const source = audio.createBufferSource();
+      source.buffer = sound;
+      source.connect(audio.destination);
+      source.start(when);
+      run.sources.push(source);
+
+      when += length - Math.min(CONFIG.overlap, length);
+    }
+    run.end = Math.max(...run.cards.map((card) => card.end));
+    paint(run);
+  }, (error) => {
+    console.error(error);
+    if (!run.dead) showNote('素材加载失败 · The letters couldn’t load');
+  });
 }
 
 /* ── Input ───────────────────────────────────────────── */
 
-// With the performed word selected, the next keystroke replaces it. Skipped on
-// touch, where focusing would raise the keyboard over the piece.
 function armForNextWord() {
   if (!canHover.matches) return;
   input.focus();
   input.select();
 }
 
-// Hanzi are a full em wide, Latin about half; good enough to keep the text on screen.
+// Hanzi are a full em wide, Latin about half, each plus the letter spacing.
+// The word wraps every 14 Hanzi, and its size is the largest at which those
+// lines fit the screen.
 function fitText() {
-  const units = [...input.value].reduce((sum, c) => sum + (c.charCodeAt(0) > 0x2e7f ? 1 : 0.56), 0);
-  input.style.setProperty('--units', Math.max(1, units * 1.04));
+  const { wordLine, wordTracking: gap } = CONFIG;
+  const width = [...input.value].reduce((sum, c) => sum + (c.charCodeAt(0) > 0x2e7f ? 1 : 0.56) + gap, 0);
+  const line = wordLine * (1 + gap);
+  input.style.setProperty('--per-line', Math.max(1 + gap, Math.min(width, line) * 1.04) + gap);
+  input.style.setProperty('--lines', Math.max(1, Math.ceil(width / line)));
+  input.style.height = '0px';
+  input.style.height = `${input.scrollHeight}px`;  // punctuation can push a line over, so measure
 }
 
 function onType() {
@@ -341,14 +405,24 @@ function onType() {
   body.dataset.state = input.value ? 'typing' : 'idle';
 }
 
-input.addEventListener('input', onType);
+input.addEventListener('input', () => {
+  if (input.value.includes('\n')) input.value = input.value.replace(/\n/g, '');  // pasted line breaks
+  onType();
+});
+
+// Enter plays the word, as it did when this was a one-line field; not while an
+// input method is still composing characters.
+input.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229) return;
+  event.preventDefault();
+  form.requestSubmit();
+});
 
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   perform(input.value);
 });
 
-// The 口 mark starts over: the word clears and the examples come back.
 document.getElementById('home').addEventListener('click', () => {
   input.value = '';
   onType();
@@ -363,12 +437,16 @@ document.querySelectorAll('[data-word]').forEach((button) => {
   });
 });
 
-// The input fills the page, so a click would otherwise drop a caret into the finished word.
-document.addEventListener('pointerup', () => {
+// The word no longer fills the page, so a click anywhere else still lands in it.
+document.addEventListener('pointerup', (event) => {
   if (current) armForNextWord();
+  else if (canHover.matches && !event.target.closest('button, .readout, textarea')) input.focus();
 });
 
 window.addEventListener('resize', () => {
   fitText();
+  markCut();
   if (current) layoutGrid(current);
 });
+
+fitText();
