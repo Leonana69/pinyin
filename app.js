@@ -2,7 +2,7 @@
 
 /* Everything worth tuning lives here. */
 const CONFIG = {
-  overlap: 0.7,         // seconds: the next clip starts this long before the current one ends;
+  overlap: 1,           // seconds: the next clip starts this long before the current one ends;
                         // a clip shorter than this overlaps for its whole length
   slideDuration: 0.75,  // seconds: the grid sliding away when the next word starts
   restStagger: 0.07,    // seconds between each card settling, in reading order (reduced motion only)
