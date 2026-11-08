@@ -224,7 +224,8 @@ body:not([data-state="idle"]) .examples { display: none; }
 .go span { opacity: .7; }
 .go:hover { background: var(--flesh); }
 
-[data-state="idle"] .go { visibility: hidden; }
+/* Gone, not just invisible, so the example words can use its space. */
+[data-state="idle"] .go { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .board { transition-duration: 1ms; }
