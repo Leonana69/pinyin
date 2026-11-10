@@ -174,10 +174,14 @@ body:is([data-state="playing"], [data-state="rest"]) #word::selection {
 
 .left { min-width: 0; }
 
+/* Always one line: words that don't fit wrap onto a second row, which is cut
+   away, so a narrower screen shows fewer words, each one whole. */
 .examples {
   display: flex;
   flex-wrap: wrap;
-  gap: .2em 1.1em;
+  gap: 2em 1.1em;
+  height: calc(1.2em + 2px);  /* one row: the line and its underline */
+  overflow: hidden;
   font-family: var(--han);
   font-size: clamp(20px, 2.2vw, 30px);
   font-weight: 900;
@@ -185,7 +189,9 @@ body:is([data-state="playing"], [data-state="rest"]) #word::selection {
 }
 
 .examples button { border-bottom: 2px solid transparent; }
-.examples button:hover { border-bottom-color: var(--ink); }
+
+/* The underline doubles as the focus ring, which the row would cut off. */
+.examples button:is(:hover, :focus-visible) { border-bottom-color: var(--ink); outline: none; }
 
 /* Examples make way the moment there is a word to spell. */
 body:not([data-state="idle"]) .examples { display: none; }
