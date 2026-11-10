@@ -18,7 +18,8 @@ const CONFIG = {
   sheetPath: (size, letter) => `assets/sheets/${size}/${letter}.jpg`,
   soundPath: (letter) => `assets/sound/${letter}.m4a`,
   labelFont: '"Helvetica Neue", Helvetica, Arial, sans-serif',
-  wordLine: 14,         // characters per line of the typed word before it wraps
+  wordLine: 32,         // characters per line of the typed word before it wraps
+  wordLineTall: 20,     // the same on an upright screen, where long lines would make the word tiny
   wordTracking: 0.2,    // extra space after each character of the typed word, in em (20%)
   wordLeading: 1.2,     // line height of the typed word, against its size (20% more than solid)
   readoutOpen: 0.3,     // seconds for the pinyin line to slide open or shut
@@ -399,10 +400,11 @@ function armForNextWord() {
 }
 
 // Hanzi are a full em wide, Latin about half, each plus the letter spacing.
-// The word wraps every 14 Hanzi, and its size is the largest at which those
-// lines fit the screen.
+// The word wraps every 32 Hanzi (20 on an upright screen), and its size is
+// the largest at which those lines fit the screen.
 function fitText() {
-  const { wordLine, wordTracking: gap } = CONFIG;
+  const { wordTracking: gap } = CONFIG;
+  const wordLine = innerWidth >= innerHeight ? CONFIG.wordLine : CONFIG.wordLineTall;
   const width = [...input.value].reduce((sum, c) => sum + (c.charCodeAt(0) > 0x2e7f ? 1 : 0.56) + gap, 0);
   const line = wordLine * (1 + gap);
   input.style.setProperty('--per-line', Math.max(1 + gap, Math.min(width, line) * 1.04) + gap);
@@ -446,7 +448,7 @@ document.getElementById('home').addEventListener('click', () => {
 /* ── 述 shù ──────────────────────────────────────────── */
 
 // 述 shù plays the statement as the read page has it, paragraphs run together;
-// Read opens that page. The page's own 述 shù takes you back to the statement
+// Info opens that page. The page's own 述 shù takes you back to the statement
 // playing: if it is already under way it simply carries on, otherwise it starts.
 const statementButton = document.getElementById('statement');
 statementButton.dataset.word = [...reader.querySelectorAll('[lang="zh-Hans"]')]
@@ -458,7 +460,7 @@ document.getElementById('reader-play').addEventListener('click', () => {
   if (!playing) statementButton.click();
 });
 
-document.getElementById('read').addEventListener('click', () => {
+document.getElementById('info').addEventListener('click', () => {
   reader.showModal();
   reader.scrollTop = 0;  // focusing the text can scroll its first lines under the heading
 });

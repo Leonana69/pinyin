@@ -7,7 +7,7 @@
   --ink: #000;
   --flesh: #f2a9a2;
   --ghost: rgba(0, 0, 0, .3);           /* the word, laid over the clips */
-  --word-scale: .5;                     /* the word's size over the clips, against its typing size */
+  --word-scale: .7;                     /* the word's size over the clips, against its typing size */
   --word-settle: .8s;                   /* how long it takes to shrink and fade there */
   --quiet: rgba(0, 0, 0, .55);
 
@@ -50,7 +50,7 @@ button:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
 
 /* ── The giant character ─────────────────────────────── */
 
-/* The word wraps every 14 characters, so a long sentence stays large. app.js
+/* The word wraps every 32 characters (20 upright), so a long sentence stays large. app.js
    sets --per-line, --lines and the height from the text. */
 #word {
   position: fixed;
@@ -75,7 +75,7 @@ button:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
   line-height: var(--word-leading);
   /* The height limit counts the extra line spacing only between lines, so a
      one-line word, like the 口 placeholder, keeps its full size. */
-  font-size: min(calc(68dvh / ((var(--lines, 1) - 1) * var(--word-leading) + 1)), calc(92vw / var(--per-line, 1)));
+  font-size: min(calc(80dvh / ((var(--lines, 1) - 1) * var(--word-leading) + 1)), calc(96vw / var(--per-line, 1)));
   transition: color .2s linear, transform .2s var(--ease);  /* quick back to full size when typing again */
 }
 
@@ -150,23 +150,19 @@ body:is([data-state="playing"], [data-state="rest"]) #word::selection {
   letter-spacing: .02em;
 }
 
-/* 口 kǒu, and under it 述 shù, which plays the artist statement. */
+/* 口 kǒu, 述 shù, which plays the artist statement, and Info, in one row. */
 .intro {
   display: flex;
-  flex-direction: column;
-  gap: clamp(14px, 1.6vw, 22px);
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .5em clamp(16px, 1.8vw, 28px);
 }
 
-/* Read, small beside 述 shù. */
-.read {
-  margin-left: .9em;
+/* Info, small, after 述 shù. */
+.info {
   border-bottom: 1px solid currentColor;
-  font-family: var(--latin);
   font-size: clamp(13px, 1.05vw, 15px);
-  font-weight: 400;
 }
-
-.mark .read span { font-size: inherit; color: var(--quiet); }
 
 .hint {
   font-size: clamp(13px, 1.05vw, 15px);
