@@ -17,7 +17,15 @@
               enterkeyhint="go" autocapitalize="off" autocorrect="off" spellcheck="false" autofocus></textarea>
 
     <header class="hud hud-top">
-      <h1 class="mark"><button id="home" type="button" title="重新开始 · Start over">口 <span>kǒu</span></button></h1>
+      <div class="intro">
+        <h1 class="mark"><button id="home" type="button" title="重新开始 · Start over">口 <span>kǒu</span></button></h1>
+        <!-- 述 shù plays the artist statement, just as if it had been typed in;
+             Read opens it in Chinese and English. -->
+        <p class="mark">
+          <button id="statement" type="button" title="自述 · Artist statement">述 <span>shù</span></button>
+          <button id="read" class="read" type="button" aria-haspopup="dialog">阅读 <span>Read</span></button>
+        </p>
+      </div>
       <p class="hint">输入汉字，按回车<br><span>Type Chinese, press Enter</span></p>
     </header>
 
@@ -41,6 +49,37 @@
       <button id="go" class="go" type="submit">播放 <span>Play</span></button>
     </footer>
   </form>
+
+  <!-- The statement to read, each paragraph beside its English. app.js takes
+       the Chinese from here for 述 shù to play. -->
+  <dialog id="reader" class="reader" aria-labelledby="reader-title">
+    <header class="reader-head">
+      <h2 id="reader-title" class="mark"><button id="reader-play" type="button" title="播放 · Play">述 <span>shù</span></button></h2>
+      <form method="dialog"><button class="close" type="submit">关闭 <span>Close</span></button></form>
+    </header>
+    <div id="statement-text" class="reader-body" tabindex="-1" autofocus>
+      <div class="pair">
+        <p lang="zh-Hans">拼音通过拉丁字母转写普通话的声音。然而，熟悉的字母并不意味着熟悉的发音。</p>
+        <p lang="en">Pinyin writes the sounds of Mandarin in Latin letters. Yet familiar letters do not mean familiar sounds.</p>
+      </div>
+      <div class="pair">
+        <p lang="zh-Hans">语言常被想象成一座桥梁，而每一座桥梁，都必然将某些事物遗落在彼岸。没有一种语言系统能够完整地容纳另一种。字母无法承载声音的全部，翻译也无法保留词语所负载的所有重量。意义在流动，也在流失。</p>
+        <p lang="en">Language is often imagined as a bridge, and every bridge must leave something behind on the far shore. No language can wholly contain another. Letters cannot carry the whole of a sound, and translation cannot keep all the weight a word bears. Meaning flows, and meaning slips away.</p>
+      </div>
+      <div class="pair">
+        <p lang="zh-Hans">这个交互式网站探索文字、发音、身体与意义之间不稳定的关系。通过汉字、拼音、英语与嘴部影像之间的转换，作品呈现第二语言使用者的经验：嘴巴在学习一种语言时，仍然记忆着另一种。它重复、迟疑、出错，在表达与理解之间不断寻找位置。</p>
+        <p lang="en">This interactive site explores the unstable relationship between writing, sound, body and meaning. Moving between Chinese characters, pinyin, English and footage of mouths, the work gives form to the experience of a second-language speaker: a mouth learning one language while still remembering another. It repeats, hesitates, makes mistakes, always searching for its place between expression and understanding.</p>
+      </div>
+      <div class="pair">
+        <p lang="zh-Hans">借鉴 Édouard Glissant 的“不透明性”理论，项目试图追问：交流是否必须以完整的理解为前提？</p>
+        <p lang="en">Drawing on Édouard Glissant’s idea of opacity, the project asks: must communication rest on complete understanding?</p>
+      </div>
+      <div class="pair">
+        <p lang="zh-Hans">或许，语言将我们连接，并非因为一切都变得透明，而恰恰是因为那些始终无法被翻译的部分。</p>
+        <p lang="en">Perhaps language connects us not because everything becomes transparent, but precisely because of what can never be translated.</p>
+      </div>
+    </div>
+  </dialog>
 
   <div id="stage" class="stage" aria-hidden="true"></div>
 

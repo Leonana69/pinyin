@@ -12,7 +12,7 @@ const CONFIG = {
                         // a clip shorter than this overlaps for its whole length
   lead: 0.15,           // seconds from pressing Enter to the first sound, so nothing is scheduled late
   slideDuration: 0.75,  // seconds: the grid sliding away when the next word starts
-  maxCards: 300,
+  maxCards: 1000,       // longer text is cut where the board comes out a full rectangle
   umlautClip: 'v',      // ü has no clip of its own; v is how pinyin keyboards type it
   sheetMemoryMB: 400,   // most memory a word's frames may take once unpacked; bigger frames step down to fit
   sheetPath: (size, letter) => `assets/sheets/${size}/${letter}.jpg`,
@@ -39,6 +39,7 @@ const stage = document.getElementById('stage');
 const readout = document.getElementById('readout');
 const hudTop = document.querySelector('.hud-top');
 const hudBottom = document.querySelector('.hud-bottom');
+const reader = document.getElementById('reader');
 const canHover = matchMedia('(hover: hover)');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const SIZES = Object.keys(SHEETS.tiers).map(Number).sort((a, b) => a - b);  // frame widths on offer
@@ -240,6 +241,18 @@ function planGrid(count) {
   };
 }
 
+// Past the limit, the text is cut where the grid has no empty cells, so the
+// board fills its whole rectangle instead of trailing off.
+function fullCount(limit) {
+  let count = limit;
+  while (count > 1) {
+    const { cols, rows } = planGrid(count);
+    if (cols * rows === count) break;
+    count -= 1;
+  }
+  return count;
+}
+
 function layoutGrid(run) {
   Object.assign(run, planGrid(run.cards.length));
   const { canvas, cols, rows, cellW, cellH } = run;
@@ -313,7 +326,8 @@ function dismiss(run) {
 
 function perform(text) {
   const syllables = decompose(text);
-  const letters = syllables.flat().slice(0, CONFIG.maxCards);
+  let letters = syllables.flat();
+  if (letters.length > CONFIG.maxCards) letters = letters.slice(0, fullCount(CONFIG.maxCards));
 
   if (!letters.length) {
     renderReadout([]);
@@ -429,6 +443,31 @@ document.getElementById('home').addEventListener('click', () => {
   if (canHover.matches) input.focus();
 });
 
+/* ── 述 shù ──────────────────────────────────────────── */
+
+// 述 shù plays the statement as the read page has it, paragraphs run together;
+// Read opens that page. The page's own 述 shù takes you back to the statement
+// playing: if it is already under way it simply carries on, otherwise it starts.
+const statementButton = document.getElementById('statement');
+statementButton.dataset.word = [...reader.querySelectorAll('[lang="zh-Hans"]')]
+  .map((paragraph) => paragraph.textContent.trim()).join('');
+
+document.getElementById('reader-play').addEventListener('click', () => {
+  const playing = current && body.dataset.state === 'playing' && input.value === statementButton.dataset.word;
+  reader.close();
+  if (!playing) statementButton.click();
+});
+
+document.getElementById('read').addEventListener('click', () => {
+  reader.showModal();
+  reader.scrollTop = 0;  // focusing the text can scroll its first lines under the heading
+});
+
+reader.addEventListener('close', () => {
+  if (current) armForNextWord();
+  else if (canHover.matches) input.focus();
+});
+
 document.querySelectorAll('[data-word]').forEach((button) => {
   button.addEventListener('click', () => {
     input.value = button.dataset.word;
@@ -439,6 +478,7 @@ document.querySelectorAll('[data-word]').forEach((button) => {
 
 // The word no longer fills the page, so a click anywhere else still lands in it.
 document.addEventListener('pointerup', (event) => {
+  if (reader.open) return;  // leave selections on the read page alone
   if (current) armForNextWord();
   else if (canHover.matches && !event.target.closest('button, .readout, textarea')) input.focus();
 });

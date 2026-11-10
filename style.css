@@ -150,6 +150,24 @@ body:is([data-state="playing"], [data-state="rest"]) #word::selection {
   letter-spacing: .02em;
 }
 
+/* 口 kǒu, and under it 述 shù, which plays the artist statement. */
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 1.6vw, 22px);
+}
+
+/* Read, small beside 述 shù. */
+.read {
+  margin-left: .9em;
+  border-bottom: 1px solid currentColor;
+  font-family: var(--latin);
+  font-size: clamp(13px, 1.05vw, 15px);
+  font-weight: 400;
+}
+
+.mark .read span { font-size: inherit; color: var(--quiet); }
+
 .hint {
   font-size: clamp(13px, 1.05vw, 15px);
   line-height: 1.35;
@@ -227,6 +245,78 @@ body:not([data-state="idle"]) .examples { display: none; }
 /* Gone, not just invisible, so the example words can use its space. */
 [data-state="idle"] .go { display: none; }
 
+/* ── Read ────────────────────────────────────────────── */
+
+/* The statement on a page of its own, over everything; the clips play on underneath. */
+.reader {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0 var(--gutter) var(--gutter);
+  border: 0;
+  overflow-y: auto;
+  background: var(--field);
+  color: var(--ink);
+}
+
+.reader::backdrop { background: var(--field); }
+.reader[open] { animation: reader-in .25s var(--ease); }
+
+@keyframes reader-in { from { opacity: 0; } }
+
+.reader-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: var(--gutter) 0;
+  background: var(--field);
+}
+
+.close {
+  border-bottom: 1px solid currentColor;
+  font-size: clamp(13px, 1.05vw, 15px);
+}
+
+.close span { color: var(--quiet); }
+
+.reader-body {
+  display: grid;
+  gap: 1.75em;
+  max-width: 68rem;
+  margin: clamp(16px, 5vh, 64px) auto clamp(32px, 10vh, 120px);
+}
+
+.reader-body:focus { outline: none; }
+
+/* Each paragraph beside its English; on a narrow screen, one above the other. */
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .75em clamp(24px, 4vw, 64px);
+  align-items: start;
+}
+
+.pair [lang="zh-Hans"] {
+  font-family: var(--han);
+  font-size: clamp(16px, 1.3vw, 19px);
+  line-height: 1.9;
+  text-align: justify;
+}
+
+.pair [lang="en"] {
+  font-size: clamp(15px, 1.15vw, 17px);
+  line-height: 1.65;
+}
+
+@media (max-width: 720px) {
+  .pair { grid-template-columns: 1fr; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .board { transition-duration: 1ms; }
+  .reader[open] { animation: none; }
 }
