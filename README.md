@@ -3,7 +3,9 @@
 一个字，被一张张嘴拼读出来。\
 A word, spelled out by mouth after mouth.
 
-**[leonana69.github.io/pinyin](https://leonana69.github.io/pinyin/)**
+**[Pinyin](https://leonana69.github.io/pinyin/)**
+
+This is a collaboration with [Mingge Zhong](https://art.yale.edu/people/students/mingge-zhong).
 
 ## 述 shù
 
